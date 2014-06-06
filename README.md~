@@ -1,0 +1,17 @@
+Install
+-------
+
+```sh
+mkdir -p ~/code
+cd ~/code
+git clone git@gitlab.f2l.info:online-devops/external_naginator.git
+mkvirtualenv external_naginator
+pip install -r requirements.txt
+```
+
+Running
+-------
+
+```sh
+./generate_poc.py
+```
