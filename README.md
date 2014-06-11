@@ -1,3 +1,5 @@
+![Travis](https://api.travis-ci.org/daniellawrence/external_naginator.svg)
+
 Install
 -------
 
