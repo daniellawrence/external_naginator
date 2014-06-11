@@ -9,8 +9,26 @@ PUPPETDB_HOST = "puppetserver.fqdn"
 PUPPETDB_API = 3
 TMP_FILES = "/tmp/nagios_tmp"
 
+# All the resource types know by puppetdb
+TYPES = [
+    'Nagios_host',
+    'Nagios_hostgroup',
+    'Nagios_hostescalation',
+    'Nagios_hostdependency',
+    'Nagios_hostextinfo',
+    'Nagios_service',
+    'Nagios_servicegroup',
+    'Nagios_serviceescalation',
+    'Nagios_servicedependency',
+    'Nagios_serviceextinfo',
+    'Nagios_contact',
+    'Nagios_contactgroup',
+    'Nagios_timeperiod',
+    'Nagios_command',
+]
 
-def get_nodefacts(db):
+
+def get_nodefacts(puppetdb):
     """
     Get all the nodes & facts from puppetdb.
 
@@ -24,14 +42,14 @@ def get_nodefacts(db):
     }
     """
     nodefacts = {}
-    for node in db.nodes():
+    for node in puppetdb.nodes():
         nodefacts[node.name] = {}
-        for f in node.facts():
-            nodefacts[node.name][f.name] = f.value
+        for fact in node.facts():
+            nodefacts[node.name][fact.name] = fact.value
     return nodefacts
 
 
-def generate_nagios_cfg_type(db, nagios_type, nodefacts):
+def generate_nagios_cfg_type(puppetdb, nagios_type, nodefacts):
     """
     Generate a nagios configuration for a single type
 
@@ -45,8 +63,8 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
     nagios_define_type = nagios_type.replace('Nagios_', '')
 
     # Write out the generate configuration into files.
-    tmp_file = "{0}/auto_{1}.cfg".format(TMP_FILES, nagios_define_type)
-    f = open(tmp_file, 'w')
+    tmp_file_name = "{0}/auto_{1}.cfg".format(TMP_FILES, nagios_define_type)
+    tmp_file = open(tmp_file_name, 'w')
 
     # Query puppetdb only throwing back the resource that match
     # the Nagios type.
@@ -55,37 +73,37 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
     # Keep track of sevice to hostname
     servicegroups = defaultdict(list)
 
-    for r in db.resources(query='["=", "type", "%s"]' % nagios_type):
+    for resource in puppetdb.resources(query='["=", "type", "%s"]' % nagios_type):
 
         # Make sure we do not try and make more than one resource for each one.
-        if r.name in unique_list:
-            print "duplicate: %s" % r.name
+        if resource.name in unique_list:
+            print "duplicate: %s" % resource.name
             continue
-        unique_list.add(r.name)
+        unique_list.add(resource.name)
 
         # Add servies to service group
         if nagios_define_type == 'service':
-            host_name = r.parameters['host_name']
-            servicegroups[r.parameters['service_description']].append(host_name)
+            host_name = resource.parameters['host_name']
+            servicegroups[resource.parameters['service_description']].append(host_name)
 
         # ignore workstatins, laptops and desktops
-        if 'workstation' in r.tags and nagios_define_type == 'host':
-            hostname = r.name
+        if 'workstation' in resource.tags and nagios_define_type == 'host':
+            hostname = resource.name
             if hostname in nodefacts and 'ipaddress_eth0' in nodefacts[hostname]:
-                r.parameters['address'] = nodefacts[hostname]['ipaddress_eth0']
+                resource.parameters['address'] = nodefacts[hostname]['ipaddress_eth0']
             else:
-                r.parameters['address'] = "127.0.0.1"
+                resource.parameters['address'] = "127.0.0.1"
 
-        f.write("define %s {\n" % nagios_define_type)
+        tmp_file.write("define %s {\n" % nagios_define_type)
 
         # puppet stores the command_name as command, we rewrite this back
         if nagios_define_type == 'command':
-            f.write("  %-30s %s\n" % ("command_name", r.name))
+            tmp_file.write("  %-30s %s\n" % ("command_name", resource.name))
 
         if nagios_define_type == 'host':
-            f.write("  %-30s %s\n" % ("host_name", r.name))
+            tmp_file.write("  %-30s %s\n" % ("host_name", resource.name))
 
-        for param_name, param_value in r.parameters.items():
+        for param_name, param_value in resource.parameters.items():
 
             if not param_value:
                 continue
@@ -96,56 +114,45 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
             if isinstance(param_value, list):
                 param_value = ",".join(param_value)
 
-            f.write("  %-30s %s\n" % (param_name, param_value))
-        f.write("}\n")
-    f.close()
+            tmp_file.write("  %-30s %s\n" % (param_name, param_value))
+        tmp_file.write("}\n")
+    tmp_file.close()
 
     for servicegroup_name, host_list in servicegroups.items():
-        tmp_file = "{0}/auto_servicegroup_{1}.cfg".format(TMP_FILES, servicegroup_name)
+        tmp_file = "{0}/auto_servicegroup_{1}.cfg".format(
+            TMP_FILES, servicegroup_name
+        )
 
         members = []
         for host in host_list:
             members.append("%s,%s" % (host, servicegroup_name))
 
-        f = open(tmp_file, 'w')
-        f.write("define servicegroup {\n")
-        f.write(" servicegroup_name %s\n" % servicegroup_name)
-        f.write(" alias %s\n" % servicegroup_name)
-        f.write(" members %s\n" % ",".join(members))
-        f.write("}\n")
-        f.close()
+        tmp_file = open(tmp_file, 'w')
+        tmp_file.write("define servicegroup {\n")
+        tmp_file.write(" servicegroup_name %s\n" % servicegroup_name)
+        tmp_file.write(" alias %s\n" % servicegroup_name)
+        tmp_file.write(" members %s\n" % ",".join(members))
+        tmp_file.write("}\n")
+        tmp_file.close()
 
 
 def generate_all():
     # Connect to puppetdb
-    db = connect(host=PUPPETDB_HOST,
-                 api_version=PUPPETDB_API,
-                 timeout=20)
+    puppetdb = connect(
+        host=PUPPETDB_HOST,
+        api_version=PUPPETDB_API,
+        timeout=20)
 
     # All the facts we know about all the nodes
-    nodefacts = get_nodefacts(db)
+    nodefacts = get_nodefacts(puppetdb)
 
-    # All the resource types know by puppetdb
-    TYPES = [
-        'Nagios_host',
-        'Nagios_hostgroup',
-        'Nagios_hostescalation',
-        'Nagios_hostdependency',
-        'Nagios_hostextinfo',
-        'Nagios_service',
-        'Nagios_servicegroup',
-        'Nagios_serviceescalation',
-        'Nagios_servicedependency',
-        'Nagios_serviceextinfo',
-        'Nagios_contact',
-        'Nagios_contactgroup',
-        'Nagios_timeperiod',
-        'Nagios_command',
-    ]
 
     # Loop over all the nagios types
     for type_ in TYPES:
-        generate_nagios_cfg_type(db=db, nagios_type=type_, nodefacts=nodefacts)
+        generate_nagios_cfg_type(
+            puppetdb=puppetdb,
+            nagios_type=type_,
+            nodefacts=nodefacts)
 
     # Generate all the hostgroups based on puppet facts
     generate_hostgroup(nodefacts, "operatingsystem")
@@ -165,19 +172,19 @@ def generate_hostgroup(nodefacts, fact_name):
     hostgroup = defaultdict(list)
     factvalue = "unknown"
 
-    tmp_file = "{0}/auto_hostgroup_{1}.cfg".format(TMP_FILES, fact_name)
-    f = open(tmp_file, 'w')
+    tmp_file_name = "{0}/auto_hostgroup_{1}.cfg".format(TMP_FILES, fact_name)
+    tmp_file = open(tmp_file_name, 'w')
 
     for hostname, facts in nodefacts.items():
         factvalue = facts[fact_name]
         hostgroup[factvalue].append(hostname)
 
     for hostgroup_name, hosts in hostgroup.items():
-        f.write("define hostgroup {\n")
-        f.write(" hostgroup_name %s_%s\n" % (fact_name, hostgroup_name))
-        f.write(" alias %s_%s\n" % (fact_name, hostgroup_name))
-        f.write(" members %s\n" % ",".join(hosts))
-        f.write("}\n")
+        tmp_file.write("define hostgroup {\n")
+        tmp_file.write(" hostgroup_name %s_%s\n" % (fact_name, hostgroup_name))
+        tmp_file.write(" alias %s_%s\n" % (fact_name, hostgroup_name))
+        tmp_file.write(" members %s\n" % ",".join(hosts))
+        tmp_file.write("}\n")
 
 
 def main():
