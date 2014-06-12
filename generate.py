@@ -67,7 +67,7 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
         unique_list.add(r.name)
 
         # Add servies to service group
-        if nagios_define_type == 'service':
+        if nagios_define_type == 'service' and 'host_name' in r.parameters:
             host_name = r.parameters['host_name']
             servicegroups[r.parameters['service_description']].append(host_name)
 
