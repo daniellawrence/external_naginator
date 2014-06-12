@@ -249,8 +249,8 @@ class NagiosConfig:
 
         for hostgroup_name, hosts in hostgroup.items():
             f.write("define hostgroup {\n")
-            f.write(" hostgroup_name %s_%s\n" % (fact_name, hostgroup_name))
-            f.write(" alias %s_%s\n" % (fact_name, hostgroup_name))
+            f.write(" hostgroup_name %s\n" % (hostgroup_name))
+            f.write(" alias %s\n" % (hostgroup_name))
             f.write(" members %s\n" % ",".join(hosts))
             f.write("}\n")
 
