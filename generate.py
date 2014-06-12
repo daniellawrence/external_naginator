@@ -92,7 +92,8 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
 
             if not param_value:
                 continue
-            if param_name in ['target', 'require', 'tag', 'notify', 'ensure']:
+            if param_name in set(['target', 'require', 'tag', 'notify',
+                                  'ensure', 'mode']):
                 continue
 
             # Convert all lists into csv values
