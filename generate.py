@@ -2,11 +2,14 @@
 """
 Generate all the nagios configuration files based on puppetdb information.
 """
-from pypuppetdb import connect
+import sys
+import logging
 from collections import defaultdict
 
-PUPPETDB_HOST = "puppetserver.fqdn"
-PUPPETDB_API = 3
+from pypuppetdb import connect
+
+LOG = logging.getLogger(__file__)
+
 TMP_FILES = "/tmp/nagios_tmp"
 
 
@@ -59,7 +62,7 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
 
         # Make sure we do not try and make more than one resource for each one.
         if r.name in unique_list:
-            print "duplicate: %s" % r.name
+            LOG.warning("duplicate: %s" % r.name)
             continue
         unique_list.add(r.name)
 
@@ -116,12 +119,7 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
         f.close()
 
 
-def generate_all():
-    # Connect to puppetdb
-    db = connect(host=PUPPETDB_HOST,
-                 api_version=PUPPETDB_API,
-                 timeout=20)
-
+def generate_all(db):
     # All the facts we know about all the nodes
     nodefacts = get_nodefacts(db)
 
@@ -180,8 +178,45 @@ def generate_hostgroup(nodefacts, fact_name):
         f.write("}\n")
 
 
-def main():
-    generate_all()
+def main(hostname, port, api_version):
+    # Connect to puppetdb
+    db = connect(host=hostname,
+                 port=port,
+                 api_version=api_version,
+                 timeout=20)
+
+    generate_all(db)
+
 
 if __name__ == '__main__':
-    main()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        '--host', action='store', default='localhost',
+        help="The hostname of the puppet DB server.")
+    parser.add_argument(
+        '--port', action='store', default=8080, type=int,
+        help="The port of the puppet DB server.")
+    parser.add_argument(
+        '-V', '--api-version', action='store', default=3, type=int,
+        help="The puppet DB version")
+    parser.add_argument(
+        '-v', '--verbose', action='count', default=0,
+        help="Increase verbosity (specify multiple times for more)")
+
+    args = parser.parse_args()
+
+    log_level = logging.WARNING
+    if args.verbose == 1:
+        log_level = logging.INFO
+    elif args.verbose >= 2:
+        log_level = logging.DEBUG
+
+    logging.basicConfig(
+        level=log_level,
+        stream=sys.stderr,
+        format='%(asctime)s %(name)s %(levelname)s %(message)s')
+
+    main(args.host, args.port, args.api_version)
