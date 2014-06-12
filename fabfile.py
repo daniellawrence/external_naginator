@@ -4,9 +4,9 @@ Generate the nagios configuration from puppetdb via genreate_poc then
 push the configuration to the nagios server.
 """
 
-from fabric.api import env, local, sudo, cd, task, puts, settings, hide
-from fabric.api import put, lcd, put
-from generate_poc import generate_all
+from fabric.api import env, local, sudo, task, puts, settings, hide
+from fabric.api import put
+from generate import generate_all
 
 env.host_string = 'yournagiossyserver.fqdn'
 
