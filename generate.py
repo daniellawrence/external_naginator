@@ -13,6 +13,81 @@ LOG = logging.getLogger(__file__)
 TMP_FILES = "/tmp/nagios_tmp"
 
 
+
+# All the resource types know by puppetdb
+TYPES = [
+    ('Nagios_host', set(['host_name', 'alias', 'display_name', 'address',
+                         'parents', 'hostgroups', 'check_command',
+                         'initial_state', 'max_check_attempts',
+                         'check_interval', 'retry_interval',
+                         'active_checks_enabled', 'passive_checks_enabled',
+                         'check_period', 'obsess_over_host', 'check_freshness',
+                         'freshness_threshold', 'event_handler',
+                         'event_handler_enabled', 'low_flap_threshold',
+                         'high_flap_threshold', 'flap_detection_enabled',
+                         'flap_detection_options', 'process_perf_data',
+                         'retain_status_information',
+                         'retain_nonstatus_information',
+                         'contacts', 'contact_groups', 'notification_interval',
+                         'first_notification_delay', 'notification_period',
+                         'notification_options', 'notifications_enabled',
+                         'stalking_options', 'notes', 'notes_url',
+                         'action_url', 'icon_image', 'icon_image_alt',
+                         'vrml_image', 'statusmap_image', '2d_coords',
+                         '3d_coords', 'use'])),
+    ('Nagios_hostgroup', set(['hostgroup_name', 'alias', 'members',
+                              'hostgroup_members', 'notes',
+                              'notes_url', 'action_url'])),
+    ('Nagios_hostescalation', None),
+    ('Nagios_hostdependency', None),
+    ('Nagios_hostextinfo', None),
+    ('Nagios_service', set(['host_name', 'hostgroup_name',
+                            'service_description', 'display_name',
+                            'servicegroups', 'is_volatile', 'check_command',
+                            'initial_state', 'max_check_attempts',
+                            'check_interval', 'retry_interval',
+                            'active_checks_enabled', 'passive_checks_enabled',
+                            'check_period', 'obsess_over_service',
+                            'check_freshness', 'freshness_threshold',
+                            'event_handler', 'event_handler_enabled',
+                            'low_flap_threshold', 'high_flap_threshold',
+                            'flap_detection_enabled', 'flap_detection_options',
+                            'process_perf_data', 'retain_status_information',
+                            'retain_nonstatus_information',
+                            'notification_interval',
+                            'first_notification_delay',
+                            'notification_period', 'notification_options',
+                            'notifications_enabled', 'contacts',
+                            'contact_groups', 'stalking_options', 'notes',
+                            'notes_url', 'action_url', 'icon_image',
+                            'icon_image_alt', 'use'])),
+    ('Nagios_servicegroup', set(['servicegroup_name', 'alias', 'members',
+                                 'servicegroup_members', 'notes', 'notes_url',
+                                 'action_url'])),
+    ('Nagios_serviceescalation', None),
+    ('Nagios_servicedependency', None),
+    ('Nagios_serviceextinfo', None),
+    ('Nagios_contact', set(['contact_name', 'alias', 'contactgroups',
+                            'host_notifications_enabled',
+                            'service_notifications_enabled',
+                            'host_notification_period',
+                            'service_notification_period',
+                            'host_notification_options',
+                            'service_notification_options',
+                            'host_notification_commands',
+                            'service_notification_commands',
+                            'email', 'pager', 'addressx',
+                            'can_submit_commands',
+                            'retain_status_information',
+                            'retain_nonstatus_information'])),
+    ('Nagios_contactgroup', set(['contactgroup_name', 'alias', 'members',
+                                 'contactgroup_members'])),
+    # Timeperiod is too dynamic to filter
+    ('Nagios_timeperiod', None),
+    ('Nagios_command', set(['command_name', 'command_line'])),
+    ]
+
+
 def get_nodefacts(db):
     """
     Get all the nodes & facts from puppetdb.
@@ -34,7 +109,7 @@ def get_nodefacts(db):
     return nodefacts
 
 
-def generate_nagios_cfg_type(db, nagios_type, nodefacts):
+def generate_nagios_cfg_type(db, nagios_type, nodefacts, directives=None):
     """
     Generate a nagios configuration for a single type
 
@@ -95,6 +170,8 @@ def generate_nagios_cfg_type(db, nagios_type, nodefacts):
             if param_name in set(['target', 'require', 'tag', 'notify',
                                   'ensure', 'mode']):
                 continue
+            if directives and param_name not in directives:
+                continue
 
             # Convert all lists into csv values
             if isinstance(param_value, list):
@@ -124,27 +201,12 @@ def generate_all(db):
     # All the facts we know about all the nodes
     nodefacts = get_nodefacts(db)
 
-    # All the resource types know by puppetdb
-    TYPES = [
-        'Nagios_host',
-        'Nagios_hostgroup',
-        'Nagios_hostescalation',
-        'Nagios_hostdependency',
-        'Nagios_hostextinfo',
-        'Nagios_service',
-        'Nagios_servicegroup',
-        'Nagios_serviceescalation',
-        'Nagios_servicedependency',
-        'Nagios_serviceextinfo',
-        'Nagios_contact',
-        'Nagios_contactgroup',
-        'Nagios_timeperiod',
-        'Nagios_command',
-    ]
-
     # Loop over all the nagios types
-    for type_ in TYPES:
-        generate_nagios_cfg_type(db=db, nagios_type=type_, nodefacts=nodefacts)
+    for type_, directives_ in TYPES:
+        generate_nagios_cfg_type(db=db,
+                                 nagios_type=type_,
+                                 nodefacts=nodefacts,
+                                 directives=directives_)
 
     # Generate all the hostgroups based on puppet facts
     generate_hostgroup(nodefacts, "operatingsystem")
