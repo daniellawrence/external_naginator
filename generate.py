@@ -209,10 +209,10 @@ def generate_all(db):
                                  directives=directives_)
 
     # Generate all the hostgroups based on puppet facts
-    generate_hostgroup(nodefacts, "operatingsystem")
-    generate_hostgroup(nodefacts, "customfact_pyhsical_location")
-    generate_hostgroup(nodefacts, "customfact_network_location")
-    generate_hostgroup(nodefacts, "customfact_role")
+    generate_hostgroup(nodefacts, "{operatingsystem}")
+    generate_hostgroup(nodefacts, "{customfact_pyhsical_location}")
+    generate_hostgroup(nodefacts, "{customfact_network_location}")
+    generate_hostgroup(nodefacts, "{customfact_role}")
 
 
 def generate_hostgroup(nodefacts, fact_name):
@@ -230,7 +230,11 @@ def generate_hostgroup(nodefacts, fact_name):
     f = open(tmp_file, 'w')
 
     for hostname, facts in nodefacts.items():
-        factvalue = facts[fact_name]
+        try:
+            factvalue = fact_name.format(**facts)
+        except KeyError:
+            LOG.error("Can't find facts for hostgroup %s" % fact_name)
+            raise
         hostgroup[factvalue].append(hostname)
 
     for hostgroup_name, hosts in hostgroup.items():
