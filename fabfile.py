@@ -14,7 +14,7 @@ TMP_DIR = "/tmp/nagios_tmp"
 
 
 @task
-def deploy(version=None):
+def deploy(puppetdb_host="puppet", puppetdb_port=8080, puppetdb_apiversion=3):
     " Generate the nagios configuration and push them into production"
 
     TMP_FILES = "{0}/auto_*.cfg".format(TMP_DIR)
@@ -25,7 +25,7 @@ def deploy(version=None):
     # Generate the nagios configuration into a temp dir
     puts("Generating files")
     with settings(hide('everything')):
-        generate_all()
+        generate_all(puppetdb_host, puppetdb_port, puppetdb_apiversion)
 
     # Clean up the current auto_*.cfg on nagios01
     with settings(warn_only=True):
