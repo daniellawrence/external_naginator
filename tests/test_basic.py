@@ -7,6 +7,7 @@ class TestGenearate(unittest.TestCase):
         self.seq = range(10)
 
     def test_smoke(self):
+        "Basic smoke test that should pickup any silly errors"
         import generate
 
 if __name__ == '__main__':
