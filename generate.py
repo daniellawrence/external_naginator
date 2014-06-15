@@ -4,6 +4,7 @@ Generate all the nagios configuration files based on puppetdb information.
 """
 import sys
 import logging
+import ConfigParser
 from collections import defaultdict
 
 from pypuppetdb import connect
@@ -220,13 +221,7 @@ class NagiosConfig:
             self.generate_nagios_cfg_type(nagios_type=type_,
                                           directives=directives_)
 
-        # Generate all the hostgroups based on puppet facts
-        self.generate_hostgroup("{operatingsystem}")
-        self.generate_hostgroup("{customfact_pyhsical_location}")
-        self.generate_hostgroup("{customfact_network_location}")
-        self.generate_hostgroup("{customfact_role}")
-
-    def generate_hostgroup(self, fact_name):
+    def generate_hostgroup(self, hostgroup_name, fact_name):
         """
         Generate a nagios host group.
 
@@ -238,7 +233,7 @@ class NagiosConfig:
         factvalue = "unknown"
 
         tmp_file = "{0}/auto_hostgroup_{1}.cfg".format(self.output_dir,
-                                                       fact_name)
+                                                       hostgroup_name)
         f = open(tmp_file, 'w')
         for hostname, facts in self.nodefacts.items():
             try:
@@ -265,6 +260,9 @@ if __name__ == '__main__':
         '--output-dir', action='store', required=True,
         help="The directory to write the Nagios config into.")
     parser.add_argument(
+        '-c', '--config', action='store',
+        help="The location of the configuration file..")
+    parser.add_argument(
         '--host', action='store', default='localhost',
         help="The hostname of the puppet DB server.")
     parser.add_argument(
@@ -290,8 +288,18 @@ if __name__ == '__main__':
         stream=sys.stderr,
         format='%(asctime)s %(name)s %(levelname)s %(message)s')
 
+    config = None
+    if args.config:
+        config = ConfigParser.ConfigParser()
+        config.readfp(open(args.config))
+
     cfg = NagiosConfig(hostname=args.host,
                        port=args.port,
                        api_version=args.api_version,
                        output_dir=args.output_dir)
     cfg.generate_all()
+
+    if config:
+        for section in config.sections():
+            cfg.generate_hostgroup(section, config.get(section,
+                                                       'fact_template'))
