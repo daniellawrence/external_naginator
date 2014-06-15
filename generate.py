@@ -86,12 +86,17 @@ TYPES = [
 
 
 class NagiosConfig:
-    def __init__(self, hostname, port, api_version, output_dir):
+    def __init__(self, hostname, port, api_version, output_dir,
+                 nodefacts=None):
         self.db = connect(host=hostname,
                           port=port,
                           api_version=api_version,
                           timeout=20)
         self.output_dir = output_dir
+        if not nodefacts:
+            self.nodefacts = self.get_nodefacts()
+        else:
+            self.nodefacts = nodefacts
 
     def get_nodefacts(self):
         """
@@ -113,7 +118,7 @@ class NagiosConfig:
                 nodefacts[node.name][f.name] = f.value
         return nodefacts
 
-    def generate_nagios_cfg_type(self, nagios_type, nodefacts,
+    def generate_nagios_cfg_type(self, nagios_type,
                                  directives=None):
         """
         Generate a nagios configuration for a single type
@@ -155,8 +160,8 @@ class NagiosConfig:
             # ignore workstatins, laptops and desktops
             if 'workstation' in r.tags and nagios_define_type == 'host':
                 hostname = r.name
-                if hostname in nodefacts and 'ipaddress_eth0' in nodefacts[hostname]:
-                    r.parameters['address'] = nodefacts[hostname]['ipaddress_eth0']
+                if hostname in self.nodefacts and 'ipaddress_eth0' in self.nodefacts[hostname]:
+                    r.parameters['address'] = self.nodefacts[hostname]['ipaddress_eth0']
                 else:
                     r.parameters['address'] = "127.0.0.1"
 
@@ -210,22 +215,18 @@ class NagiosConfig:
             f.close()
 
     def generate_all(self):
-        # All the facts we know about all the nodes
-        nodefacts = self.get_nodefacts()
-
         # Loop over all the nagios types
         for type_, directives_ in TYPES:
             self.generate_nagios_cfg_type(nagios_type=type_,
-                                          nodefacts=nodefacts,
                                           directives=directives_)
 
         # Generate all the hostgroups based on puppet facts
-        self.generate_hostgroup(nodefacts, "{operatingsystem}")
-        self.generate_hostgroup(nodefacts, "{customfact_pyhsical_location}")
-        self.generate_hostgroup(nodefacts, "{customfact_network_location}")
-        self.generate_hostgroup(nodefacts, "{customfact_role}")
+        self.generate_hostgroup("{operatingsystem}")
+        self.generate_hostgroup("{customfact_pyhsical_location}")
+        self.generate_hostgroup("{customfact_network_location}")
+        self.generate_hostgroup("{customfact_role}")
 
-    def generate_hostgroup(self, nodefacts, fact_name):
+    def generate_hostgroup(self, fact_name):
         """
         Generate a nagios host group.
 
@@ -239,7 +240,7 @@ class NagiosConfig:
         tmp_file = "{0}/auto_hostgroup_{1}.cfg".format(self.output_dir,
                                                        fact_name)
         f = open(tmp_file, 'w')
-        for hostname, facts in nodefacts.items():
+        for hostname, facts in self.nodefacts.items():
             try:
                 factvalue = fact_name.format(**facts)
             except KeyError:
