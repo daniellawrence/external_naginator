@@ -308,5 +308,7 @@ if __name__ == '__main__':
 
     if config:
         for section in config.sections():
+            if not section.startswith('hostgroup_'):
+                continue
             cfg.generate_hostgroup(section, config.get(section,
                                                        'fact_template'))
