@@ -40,9 +40,6 @@ TYPES = [
                             'contact_groups', 'stalking_options', 'notes',
                             'notes_url', 'action_url', 'icon_image',
                             'icon_image_alt', 'use'])),
-    ('Nagios_servicegroup', set(['servicegroup_name', 'alias', 'members',
-                                 'servicegroup_members', 'notes', 'notes_url',
-                                 'action_url'])),
     ('Nagios_serviceescalation', None),
     ('Nagios_servicedependency', None),
     ('Nagios_serviceextinfo', None),
@@ -67,7 +64,7 @@ TYPES = [
 ]
 
 
-class NagiosType:
+class NagiosType(object):
     directives = None
 
     def __init__(self, db, output_dir,
@@ -173,6 +170,54 @@ class NagiosHost(NagiosType):
             self.file.write("  %-30s %s\n" % ("name", resource.name))
 
 
+class NagiosServiceGroup(NagiosType):
+    nagios_type = 'servicegroup'
+    directives = set(['servicegroup_name', 'alias', 'members',
+                      'servicegroup_members', 'notes', 'notes_url',
+                      'action_url'])
+
+    def generate(self):
+        super(NagiosServiceGroup, self).generate()
+        self.generate_auto_servicegroups()
+
+    def generate_auto_servicegroups(self):
+        # Query puppetdb only throwing back the resource that match
+        # the Nagios type.
+        unique_list = set([])
+
+        # Keep track of sevice to hostname
+        servicegroups = defaultdict(list)
+
+        for r in self.db.resources(query=self.query_string('Nagios_service')):
+            # Make sure we do not try and make more than one resource
+            # for each one.
+            if r.name in unique_list:
+                LOG.warning("duplicate: %s" % r.name)
+                continue
+            unique_list.add(r.name)
+
+            # Add servies to service group
+            if 'host_name' in r.parameters:
+                host_name = r.parameters['host_name']
+                servicegroups[r.parameters['service_description']].append(host_name)
+
+        for servicegroup_name, host_list in servicegroups.items():
+            tmp_file = "{0}/auto_servicegroup_{1}.cfg".format(self.output_dir,
+                                                              servicegroup_name)
+
+            members = []
+            for host in host_list:
+                members.append("%s,%s" % (host, servicegroup_name))
+
+            f = open(tmp_file, 'w')
+            f.write("define servicegroup {\n")
+            f.write(" servicegroup_name %s\n" % servicegroup_name)
+            f.write(" alias %s\n" % servicegroup_name)
+            f.write(" members %s\n" % ",".join(members))
+            f.write("}\n")
+            f.close()
+
+
 class NagiosConfig:
     def __init__(self, hostname, port, api_version, output_dir,
                  nodefacts=None, query=None):
@@ -237,9 +282,6 @@ class NagiosConfig:
         # the Nagios type.
         unique_list = set([])
 
-        # Keep track of sevice to hostname
-        servicegroups = defaultdict(list)
-
         for r in self.db.resources(query=self.query_string(nagios_type)):
             # Make sure we do not try and make more than one resource
             # for each one.
@@ -247,11 +289,6 @@ class NagiosConfig:
                 LOG.warning("duplicate: %s" % r.name)
                 continue
             unique_list.add(r.name)
-
-            # Add servies to service group
-            if nagios_define_type == 'service' and 'host_name' in r.parameters:
-                host_name = r.parameters['host_name']
-                servicegroups[r.parameters['service_description']].append(host_name)
 
             f.write("define %s {\n" % nagios_define_type)
 
@@ -265,9 +302,6 @@ class NagiosConfig:
             if nagios_define_type == 'service':
                 if 'host_name' not in r.parameters:
                     f.write("  %-30s %s\n" % ("name", r.name))
-
-            if nagios_define_type == 'servicegroup':
-                f.write("  %-30s %s\n" % ("servicegroup_name", r.name))
 
             if nagios_define_type == 'contact':
                 f.write("  %-30s %s\n" % ("contact_name", r.name))
@@ -296,29 +330,13 @@ class NagiosConfig:
             f.write("}\n")
         f.close()
 
-        for servicegroup_name, host_list in servicegroups.items():
-            tmp_file = "{0}/auto_servicegroup_{1}.cfg".format(self.output_dir,
-                                                              servicegroup_name)
-
-            members = []
-            for host in host_list:
-                members.append("%s,%s" % (host, servicegroup_name))
-
-            f = open(tmp_file, 'w')
-            f.write("define servicegroup {\n")
-            f.write(" servicegroup_name %s\n" % servicegroup_name)
-            f.write(" alias %s\n" % servicegroup_name)
-            f.write(" members %s\n" % ",".join(members))
-            f.write("}\n")
-            f.close()
-
     def generate_all(self):
         # Loop over all the nagios types
         for type_, directives_ in TYPES:
             self.generate_nagios_cfg_type(nagios_type=type_,
                                           directives=directives_)
 
-        for cls in [NagiosHost]:
+        for cls in [NagiosHost, NagiosServiceGroup]:
             inst = cls(self.db, self.output_dir,
                        self.nodefacts, self.query)
             inst.generate()
