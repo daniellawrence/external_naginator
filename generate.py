@@ -354,7 +354,8 @@ class NagiosConfig:
             hostgroup[factvalue].append(hostname)
 
         nagios_hosts = set(
-            [h.name for h in self.db.resources(query=self.query_string('Nagios_host'))
+            [h.name for h in self.db.resources(
+                query=self.query_string('Nagios_host'))
              if h.name in self.nodefacts])
 
         for hostgroup_name, hosts in hostgroup.items():
