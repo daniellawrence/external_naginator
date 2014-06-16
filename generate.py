@@ -173,7 +173,10 @@ class NagiosConfig:
                 f.write("  %-30s %s\n" % ("command_name", r.name))
 
             if nagios_define_type == 'host':
-                f.write("  %-30s %s\n" % ("host_name", r.name))
+                if r.name in self.nodefacts:
+                    f.write("  %-30s %s\n" % ("host_name", r.name))
+                else:
+                    f.write("  %-30s %s\n" % ("name", r.name))
 
             if nagios_define_type == 'hostgroup':
                 f.write("  %-30s %s\n" % ("hostgroup_name", r.name))
