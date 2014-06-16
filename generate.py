@@ -334,8 +334,8 @@ class NagiosConfig:
         hostgroup = defaultdict(list)
         factvalue = "unknown"
 
-        tmp_file = "{0}/auto_hostgroup_{1}.cfg".format(self.output_dir,
-                                                       hostgroup_name)
+        tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
+                                             hostgroup_name)
         f = open(tmp_file, 'w')
         for hostname, facts in self.nodefacts.items():
             try:
