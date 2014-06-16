@@ -88,7 +88,7 @@ TYPES = [
 
 class NagiosConfig:
     def __init__(self, hostname, port, api_version, output_dir,
-                 nodefacts=None):
+                 nodefacts=None, query=None):
         self.db = connect(host=hostname,
                           port=port,
                           api_version=api_version,
@@ -98,6 +98,7 @@ class NagiosConfig:
             self.nodefacts = self.get_nodefacts()
         else:
             self.nodefacts = nodefacts
+        self.query = query
 
     def get_nodefacts(self):
         """
@@ -118,6 +119,13 @@ class NagiosConfig:
             for f in node.facts():
                 nodefacts[node.name][f.name] = f.value
         return nodefacts
+
+    def query_string(self, nagios_type):
+        if not self.query:
+            return '["=", "type", "%s"]' % (nagios_type)
+        query_parts = ['["=", "%s", "%s"]' % q for q in self.query]
+        query_parts.append('["=", "type", "%s"]' % (nagios_type))
+        return '["and", %s]' % ", ".join(query_parts)
 
     def generate_nagios_cfg_type(self, nagios_type,
                                  directives=None):
@@ -145,7 +153,7 @@ class NagiosConfig:
         # Keep track of sevice to hostname
         servicegroups = defaultdict(list)
 
-        for r in self.db.resources(query='["=", "type", "%s"]' % nagios_type):
+        for r in self.db.resources(query=self.query_string(nagios_type)):
             # Make sure we do not try and make more than one resource
             # for each one.
             if r.name in unique_list:
@@ -300,10 +308,16 @@ if __name__ == '__main__':
         config = ConfigParser.ConfigParser()
         config.readfp(open(args.config))
 
+    query = None
+    if config:
+        if 'query' in config.sections():
+            query = config.items('query')
+
     cfg = NagiosConfig(hostname=args.host,
                        port=args.port,
                        api_version=args.api_version,
-                       output_dir=args.output_dir)
+                       output_dir=args.output_dir,
+                       query=query)
     cfg.generate_all()
 
     if config:
