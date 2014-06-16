@@ -14,25 +14,6 @@ LOG = logging.getLogger(__file__)
 
 # All the resource types know by puppetdb
 TYPES = [
-    ('Nagios_host', set(['host_name', 'alias', 'display_name', 'address',
-                         'parents', 'hostgroups', 'check_command',
-                         'initial_state', 'max_check_attempts',
-                         'check_interval', 'retry_interval',
-                         'active_checks_enabled', 'passive_checks_enabled',
-                         'check_period', 'obsess_over_host', 'check_freshness',
-                         'freshness_threshold', 'event_handler',
-                         'event_handler_enabled', 'low_flap_threshold',
-                         'high_flap_threshold', 'flap_detection_enabled',
-                         'flap_detection_options', 'process_perf_data',
-                         'retain_status_information',
-                         'retain_nonstatus_information',
-                         'contacts', 'contact_groups', 'notification_interval',
-                         'first_notification_delay', 'notification_period',
-                         'notification_options', 'notifications_enabled',
-                         'stalking_options', 'notes', 'notes_url',
-                         'action_url', 'icon_image', 'icon_image_alt',
-                         'vrml_image', 'statusmap_image', '2d_coords',
-                         '3d_coords', 'use'])),
     ('Nagios_hostgroup', set(['hostgroup_name', 'alias', 'members',
                               'hostgroup_members', 'notes',
                               'notes_url', 'action_url'])),
@@ -84,6 +65,112 @@ TYPES = [
     ('Nagios_timeperiod', None),
     ('Nagios_command', set(['command_name', 'command_line'])),
 ]
+
+
+class NagiosType:
+    directives = None
+
+    def __init__(self, db, output_dir,
+                 nodefacts=None, query=None):
+        self.db = db
+        self.output_dir = output_dir
+        if not nodefacts:
+            self.nodefacts = self.get_nodefacts()
+        else:
+            self.nodefacts = nodefacts
+        self.query = query
+        self.file = open(self.file_name(), 'w')
+
+    def query_string(self, nagios_type=None):
+        if not nagios_type:
+            nagios_type = 'Nagios_' + self.nagios_type
+
+        if not self.query:
+            return '["=", "type", "%s"]' % (nagios_type)
+        query_parts = ['["=", "%s", "%s"]' % q for q in self.query]
+        query_parts.append('["=", "type", "%s"]' % (nagios_type))
+        return '["and", %s]' % ", ".join(query_parts)
+
+    def file_name(self):
+        return "{0}/auto_{1}.cfg".format(self.output_dir, self.nagios_type)
+
+    def generate_name(self, resource):
+        self.file.write("  %-30s_name %s\n" % (self.nagios_type,
+                                               resource.name))
+
+    def generate_parameters(self, resource):
+        for param_name, param_value in resource.parameters.items():
+
+            if not param_value:
+                continue
+            if param_name in set(['target', 'require', 'tag', 'notify',
+                                  'ensure', 'mode']):
+                continue
+            if self.directives and param_name not in self.directives:
+                continue
+
+            # Convert all lists into csv values
+            if isinstance(param_value, list):
+                param_value = ",".join(param_value)
+
+            self.file.write("  %-30s %s\n" % (param_name, param_value))
+
+    def generate(self):
+        """
+        Generate a nagios configuration for a single type
+
+        The output of this will be a single file for each type.
+        eg.
+          auto_hosts.cfg
+          auto_checks.cfg
+        """
+
+        # Query puppetdb only throwing back the resource that match
+        # the Nagios type.
+        unique_list = set([])
+
+        for r in self.db.resources(query=self.query_string()):
+            # Make sure we do not try and make more than one resource
+            # for each one.
+            if r.name in unique_list:
+                LOG.warning("duplicate: %s" % r.name)
+                continue
+            unique_list.add(r.name)
+
+            self.file.write("define %s {\n" % self.nagios_type)
+            self.generate_name(r)
+            self.generate_parameters(r)
+            self.file.write("}\n")
+        self.file.close()
+
+
+class NagiosHost(NagiosType):
+    nagios_type = 'host'
+    directives = set(['host_name', 'alias', 'display_name', 'address',
+                      'parents', 'hostgroups', 'check_command',
+                      'initial_state', 'max_check_attempts',
+                      'check_interval', 'retry_interval',
+                      'active_checks_enabled', 'passive_checks_enabled',
+                      'check_period', 'obsess_over_host', 'check_freshness',
+                      'freshness_threshold', 'event_handler',
+                      'event_handler_enabled', 'low_flap_threshold',
+                      'high_flap_threshold', 'flap_detection_enabled',
+                      'flap_detection_options', 'process_perf_data',
+                      'retain_status_information',
+                      'retain_nonstatus_information',
+                      'contacts', 'contact_groups', 'notification_interval',
+                      'first_notification_delay', 'notification_period',
+                      'notification_options', 'notifications_enabled',
+                      'stalking_options', 'notes', 'notes_url',
+                      'action_url', 'icon_image', 'icon_image_alt',
+                      'vrml_image', 'statusmap_image', '2d_coords',
+                      '3d_coords', 'use'])
+
+    def generate_name(self, resource):
+        if resource.name in self.nodefacts:
+            self.file.write("  %-30s %s\n" % ("host_name", resource.name))
+        else:
+            self.file.write("  %-30s %s\n" % ("name", resource.name))
 
 
 class NagiosConfig:
@@ -180,12 +267,6 @@ class NagiosConfig:
             if nagios_define_type == 'command':
                 f.write("  %-30s %s\n" % ("command_name", r.name))
 
-            if nagios_define_type == 'host':
-                if r.name in self.nodefacts:
-                    f.write("  %-30s %s\n" % ("host_name", r.name))
-                else:
-                    f.write("  %-30s %s\n" % ("name", r.name))
-
             if nagios_define_type == 'hostgroup':
                 f.write("  %-30s %s\n" % ("hostgroup_name", r.name))
 
@@ -244,6 +325,11 @@ class NagiosConfig:
         for type_, directives_ in TYPES:
             self.generate_nagios_cfg_type(nagios_type=type_,
                                           directives=directives_)
+
+        for cls in [NagiosHost]:
+            inst = cls(self.db, self.output_dir,
+                       self.nodefacts, self.query)
+            inst.generate()
 
     def generate_hostgroup(self, hostgroup_name, fact_name):
         """
