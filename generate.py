@@ -196,6 +196,15 @@ class NagiosConfig:
             if nagios_define_type == 'servicegroup':
                 f.write("  %-30s %s\n" % ("servicegroup_name", r.name))
 
+            if nagios_define_type == 'contact':
+                f.write("  %-30s %s\n" % ("contact_name", r.name))
+
+            if nagios_define_type == 'contactgroup':
+                f.write("  %-30s %s\n" % ("contactgroup_name", r.name))
+
+            if nagios_define_type == 'timeperiod':
+                f.write("  %-30s %s\n" % ("timeperiod_name", r.name))
+
             for param_name, param_value in r.parameters.items():
 
                 if not param_value:
