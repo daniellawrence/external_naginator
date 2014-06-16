@@ -258,11 +258,16 @@ class NagiosConfig:
                 raise
             hostgroup[factvalue].append(hostname)
 
+        nagios_hosts = set(
+            [h.name for h in self.db.resources(query=self.query_string('Nagios_host'))
+             if h.name in self.nodefacts])
+
         for hostgroup_name, hosts in hostgroup.items():
             f.write("define hostgroup {\n")
             f.write(" hostgroup_name %s\n" % (hostgroup_name))
             f.write(" alias %s\n" % (hostgroup_name))
-            f.write(" members %s\n" % ",".join(hosts))
+            f.write(" members %s\n" % ",".join([h for h in hosts
+                                                if h in nagios_hosts]))
             f.write("}\n")
 
 
