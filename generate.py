@@ -20,26 +20,6 @@ TYPES = [
     ('Nagios_hostescalation', None),
     ('Nagios_hostdependency', None),
     ('Nagios_hostextinfo', None),
-    ('Nagios_service', set(['host_name', 'hostgroup_name',
-                            'service_description', 'display_name',
-                            'servicegroups', 'is_volatile', 'check_command',
-                            'initial_state', 'max_check_attempts',
-                            'check_interval', 'retry_interval',
-                            'active_checks_enabled', 'passive_checks_enabled',
-                            'check_period', 'obsess_over_service',
-                            'check_freshness', 'freshness_threshold',
-                            'event_handler', 'event_handler_enabled',
-                            'low_flap_threshold', 'high_flap_threshold',
-                            'flap_detection_enabled', 'flap_detection_options',
-                            'process_perf_data', 'retain_status_information',
-                            'retain_nonstatus_information',
-                            'notification_interval',
-                            'first_notification_delay',
-                            'notification_period', 'notification_options',
-                            'notifications_enabled', 'contacts',
-                            'contact_groups', 'stalking_options', 'notes',
-                            'notes_url', 'action_url', 'icon_image',
-                            'icon_image_alt', 'use'])),
     ('Nagios_serviceescalation', None),
     ('Nagios_servicedependency', None),
     ('Nagios_serviceextinfo', None),
@@ -218,6 +198,34 @@ class NagiosServiceGroup(NagiosType):
             f.close()
 
 
+class NagiosService(NagiosType):
+    nagios_type = 'service'
+    directives = set(['host_name', 'hostgroup_name',
+                      'service_description', 'display_name',
+                      'servicegroups', 'is_volatile', 'check_command',
+                      'initial_state', 'max_check_attempts',
+                      'check_interval', 'retry_interval',
+                      'active_checks_enabled', 'passive_checks_enabled',
+                      'check_period', 'obsess_over_service',
+                      'check_freshness', 'freshness_threshold',
+                      'event_handler', 'event_handler_enabled',
+                      'low_flap_threshold', 'high_flap_threshold',
+                      'flap_detection_enabled', 'flap_detection_options',
+                      'process_perf_data', 'retain_status_information',
+                      'retain_nonstatus_information',
+                      'notification_interval',
+                      'first_notification_delay',
+                      'notification_period', 'notification_options',
+                      'notifications_enabled', 'contacts',
+                      'contact_groups', 'stalking_options', 'notes',
+                      'notes_url', 'action_url', 'icon_image',
+                      'icon_image_alt', 'use'])
+
+    def generate_name(self, resource):
+        if 'host_name' not in resource.parameters:
+            self.file.write("  %-30s %s\n" % ("name", resource.name))
+
+
 class NagiosConfig:
     def __init__(self, hostname, port, api_version, output_dir,
                  nodefacts=None, query=None):
@@ -299,10 +307,6 @@ class NagiosConfig:
             if nagios_define_type == 'hostgroup':
                 f.write("  %-30s %s\n" % ("hostgroup_name", r.name))
 
-            if nagios_define_type == 'service':
-                if 'host_name' not in r.parameters:
-                    f.write("  %-30s %s\n" % ("name", r.name))
-
             if nagios_define_type == 'contact':
                 f.write("  %-30s %s\n" % ("contact_name", r.name))
 
@@ -336,7 +340,7 @@ class NagiosConfig:
             self.generate_nagios_cfg_type(nagios_type=type_,
                                           directives=directives_)
 
-        for cls in [NagiosHost, NagiosServiceGroup]:
+        for cls in [NagiosHost, NagiosServiceGroup, NagiosService]:
             inst = cls(self.db, self.output_dir,
                        self.nodefacts, self.query)
             inst.generate()
