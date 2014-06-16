@@ -95,8 +95,8 @@ class NagiosType:
         return "{0}/auto_{1}.cfg".format(self.output_dir, self.nagios_type)
 
     def generate_name(self, resource):
-        self.file.write("  %-30s_name %s\n" % (self.nagios_type,
-                                               resource.name))
+        self.file.write("  %-30s %s\n" % (self.nagios_type + '_name',
+                                          resource.name))
 
     def generate_parameters(self, resource):
         for param_name, param_value in resource.parameters.items():
