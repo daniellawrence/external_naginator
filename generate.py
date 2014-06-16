@@ -12,38 +12,6 @@ from pypuppetdb import connect
 LOG = logging.getLogger(__file__)
 
 
-# All the resource types know by puppetdb
-TYPES = [
-    ('Nagios_hostgroup', set(['hostgroup_name', 'alias', 'members',
-                              'hostgroup_members', 'notes',
-                              'notes_url', 'action_url'])),
-    ('Nagios_hostescalation', None),
-    ('Nagios_hostdependency', None),
-    ('Nagios_hostextinfo', None),
-    ('Nagios_serviceescalation', None),
-    ('Nagios_servicedependency', None),
-    ('Nagios_serviceextinfo', None),
-    ('Nagios_contact', set(['contact_name', 'alias', 'contactgroups',
-                            'host_notifications_enabled',
-                            'service_notifications_enabled',
-                            'host_notification_period',
-                            'service_notification_period',
-                            'host_notification_options',
-                            'service_notification_options',
-                            'host_notification_commands',
-                            'service_notification_commands',
-                            'email', 'pager', 'addressx',
-                            'can_submit_commands',
-                            'retain_status_information',
-                            'retain_nonstatus_information'])),
-    ('Nagios_contactgroup', set(['contactgroup_name', 'alias', 'members',
-                                 'contactgroup_members'])),
-    # Timeperiod is too dynamic to filter
-    ('Nagios_timeperiod', None),
-    ('Nagios_command', set(['command_name', 'command_line'])),
-]
-
-
 class NagiosType(object):
     directives = None
 
@@ -226,6 +194,114 @@ class NagiosService(NagiosType):
             self.file.write("  %-30s %s\n" % ("name", resource.name))
 
 
+class NagiosHostGroup(NagiosType):
+    nagios_type = 'hostgroup'
+    directives = set(['hostgroup_name', 'alias', 'members',
+                      'hostgroup_members', 'notes',
+                      'notes_url', 'action_url'])
+
+
+class NagiosHostEscalation(NagiosType):
+    nagios_type = 'hostescalation'
+
+
+class NagiosHostDependency(NagiosType):
+    nagios_type = 'hostdependency'
+
+
+class NagiosHostExtInfo(NagiosType):
+    nagios_type = 'hostextinfo'
+
+
+class NagiosServiceEscalation(NagiosType):
+    nagios_type = 'serviceescalation'
+
+
+class NagiosServiceDependency(NagiosType):
+    nagios_type = 'servicedependency'
+
+
+class NagiosServiceExtInfo(NagiosType):
+    nagios_type = 'serviceextinfo'
+
+
+class NagiosTimePeriod(NagiosType):
+    nagios_type = 'timeperiod'
+
+
+class NagiosCommand(NagiosType):
+    nagios_type = 'command'
+    directives = set(['command_name', 'command_line'])
+
+
+class NagiosContact(NagiosType):
+    nagios_type = 'contact'
+    directives = set(['contact_name', 'alias', 'contactgroups',
+                      'host_notifications_enabled',
+                      'service_notifications_enabled',
+                      'host_notification_period',
+                      'service_notification_period',
+                      'host_notification_options',
+                      'service_notification_options',
+                      'host_notification_commands',
+                      'service_notification_commands',
+                      'email', 'pager', 'addressx',
+                      'can_submit_commands',
+                      'retain_status_information',
+                      'retain_nonstatus_information'])
+
+
+class NagiosContactGroup(NagiosType):
+    nagios_type = 'contactgroup'
+    directives = set(['contactgroup_name', 'alias', 'members',
+                      'contactgroup_members'])
+
+
+class CustomNagiosHostGroup(NagiosType):
+    def __init__(self, db, output_dir, name,
+                 nodefacts=None, query=None):
+        self.nagios_type = name
+        super(CustomNagiosHostGroup, self).__init__(db=db,
+                                                    output_dir=output_dir,
+                                                    nodefacts=nodefacts,
+                                                    query=query)
+
+    def generate(self, hostgroup_name, fact_name):
+        """
+        Generate a nagios host group.
+
+        This could use some love for example:
+         passing operatingsystem and operatingsystem would work.
+        """
+
+        hostgroup = defaultdict(list)
+        factvalue = "unknown"
+
+        tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
+                                             hostgroup_name)
+        f = open(tmp_file, 'w')
+        for hostname, facts in self.nodefacts.items():
+            try:
+                factvalue = fact_name.format(**facts)
+            except KeyError:
+                LOG.error("Can't find facts for hostgroup %s" % fact_name)
+                raise
+            hostgroup[factvalue].append(hostname)
+
+        nagios_hosts = set(
+            [h.name for h in self.db.resources(
+                query=self.query_string('Nagios_host'))
+             if h.name in self.nodefacts])
+
+        for hostgroup_name, hosts in hostgroup.items():
+            f.write("define hostgroup {\n")
+            f.write(" hostgroup_name %s\n" % (hostgroup_name))
+            f.write(" alias %s\n" % (hostgroup_name))
+            f.write(" members %s\n" % ",".join([h for h in hosts
+                                                if h in nagios_hosts]))
+            f.write("}\n")
+
+
 class NagiosConfig:
     def __init__(self, hostname, port, api_version, output_dir,
                  nodefacts=None, query=None):
@@ -260,125 +336,13 @@ class NagiosConfig:
                 nodefacts[node.name][f.name] = f.value
         return nodefacts
 
-    def query_string(self, nagios_type):
-        if not self.query:
-            return '["=", "type", "%s"]' % (nagios_type)
-        query_parts = ['["=", "%s", "%s"]' % q for q in self.query]
-        query_parts.append('["=", "type", "%s"]' % (nagios_type))
-        return '["and", %s]' % ", ".join(query_parts)
-
-    def generate_nagios_cfg_type(self, nagios_type,
-                                 directives=None):
-        """
-        Generate a nagios configuration for a single type
-
-        The output of this will be a single file for each type.
-        eg.
-          auto_hosts.cfg
-          auto_checks.cfg
-        """
-
-        # This is the namaed used for the configuration files.
-        nagios_define_type = nagios_type.replace('Nagios_', '')
-
-        # Write out the generate configuration into files.
-        tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
-                                             nagios_define_type)
-        f = open(tmp_file, 'w')
-
-        # Query puppetdb only throwing back the resource that match
-        # the Nagios type.
-        unique_list = set([])
-
-        for r in self.db.resources(query=self.query_string(nagios_type)):
-            # Make sure we do not try and make more than one resource
-            # for each one.
-            if r.name in unique_list:
-                LOG.warning("duplicate: %s" % r.name)
-                continue
-            unique_list.add(r.name)
-
-            f.write("define %s {\n" % nagios_define_type)
-
-            # puppet stores the command_name as command, we rewrite this back
-            if nagios_define_type == 'command':
-                f.write("  %-30s %s\n" % ("command_name", r.name))
-
-            if nagios_define_type == 'hostgroup':
-                f.write("  %-30s %s\n" % ("hostgroup_name", r.name))
-
-            if nagios_define_type == 'contact':
-                f.write("  %-30s %s\n" % ("contact_name", r.name))
-
-            if nagios_define_type == 'contactgroup':
-                f.write("  %-30s %s\n" % ("contactgroup_name", r.name))
-
-            if nagios_define_type == 'timeperiod':
-                f.write("  %-30s %s\n" % ("timeperiod_name", r.name))
-
-            for param_name, param_value in r.parameters.items():
-
-                if not param_value:
-                    continue
-                if param_name in set(['target', 'require', 'tag', 'notify',
-                                      'ensure', 'mode']):
-                    continue
-                if directives and param_name not in directives:
-                    continue
-
-                # Convert all lists into csv values
-                if isinstance(param_value, list):
-                    param_value = ",".join(param_value)
-
-                f.write("  %-30s %s\n" % (param_name, param_value))
-            f.write("}\n")
-        f.close()
-
     def generate_all(self):
-        # Loop over all the nagios types
-        for type_, directives_ in TYPES:
-            self.generate_nagios_cfg_type(nagios_type=type_,
-                                          directives=directives_)
-
-        for cls in [NagiosHost, NagiosServiceGroup, NagiosService]:
+        for cls in NagiosType.__subclasses__():
+            if cls.__name__.startswith('Custom'):
+                continue
             inst = cls(self.db, self.output_dir,
                        self.nodefacts, self.query)
             inst.generate()
-
-    def generate_hostgroup(self, hostgroup_name, fact_name):
-        """
-        Generate a nagios host group.
-
-        This could use some love for example:
-         passing operatingsystem and operatingsystem would work.
-        """
-
-        hostgroup = defaultdict(list)
-        factvalue = "unknown"
-
-        tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
-                                             hostgroup_name)
-        f = open(tmp_file, 'w')
-        for hostname, facts in self.nodefacts.items():
-            try:
-                factvalue = fact_name.format(**facts)
-            except KeyError:
-                LOG.error("Can't find facts for hostgroup %s" % fact_name)
-                raise
-            hostgroup[factvalue].append(hostname)
-
-        nagios_hosts = set(
-            [h.name for h in self.db.resources(
-                query=self.query_string('Nagios_host'))
-             if h.name in self.nodefacts])
-
-        for hostgroup_name, hosts in hostgroup.items():
-            f.write("define hostgroup {\n")
-            f.write(" hostgroup_name %s\n" % (hostgroup_name))
-            f.write(" alias %s\n" % (hostgroup_name))
-            f.write(" members %s\n" % ",".join([h for h in hosts
-                                                if h in nagios_hosts]))
-            f.write("}\n")
 
 
 if __name__ == '__main__':
@@ -439,5 +403,6 @@ if __name__ == '__main__':
         for section in config.sections():
             if not section.startswith('hostgroup_'):
                 continue
-            cfg.generate_hostgroup(section, config.get(section,
-                                                       'fact_template'))
+            group = CustomNagiosHostGroup(cfg.db, args.output_dir,
+                                          section, cfg.nodefacts, query)
+            group.generate(section, config.get(section, 'fact_template'))
