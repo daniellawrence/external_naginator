@@ -83,7 +83,7 @@ TYPES = [
     # Timeperiod is too dynamic to filter
     ('Nagios_timeperiod', None),
     ('Nagios_command', set(['command_name', 'command_line'])),
-    ]
+]
 
 
 class NagiosConfig:
