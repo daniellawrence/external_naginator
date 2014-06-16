@@ -181,6 +181,10 @@ class NagiosConfig:
             if nagios_define_type == 'hostgroup':
                 f.write("  %-30s %s\n" % ("hostgroup_name", r.name))
 
+            if nagios_define_type == 'service':
+                if 'host_name' not in r.parameters:
+                    f.write("  %-30s %s\n" % ("name", r.name))
+
             if nagios_define_type == 'servicegroup':
                 f.write("  %-30s %s\n" % ("servicegroup_name", r.name))
 
