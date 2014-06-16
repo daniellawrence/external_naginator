@@ -253,14 +253,6 @@ class NagiosConfig:
                 host_name = r.parameters['host_name']
                 servicegroups[r.parameters['service_description']].append(host_name)
 
-            # ignore workstatins, laptops and desktops
-            if 'workstation' in r.tags and nagios_define_type == 'host':
-                hostname = r.name
-                if hostname in self.nodefacts and 'ipaddress_eth0' in self.nodefacts[hostname]:
-                    r.parameters['address'] = self.nodefacts[hostname]['ipaddress_eth0']
-                else:
-                    r.parameters['address'] = "127.0.0.1"
-
             f.write("define %s {\n" % nagios_define_type)
 
             # puppet stores the command_name as command, we rewrite this back
