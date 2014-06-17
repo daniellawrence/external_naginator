@@ -12,6 +12,21 @@ from pypuppetdb import connect
 LOG = logging.getLogger(__file__)
 
 
+class Memorize:
+
+    def __init__(self, f):
+        self.f = f
+        self.mem = {}
+
+    def __call__(self, *args, **kwargs):
+        if (args, str(kwargs)) in self.mem:
+            return self.mem[args, str(kwargs)]
+        else:
+            tmp = self.f(*args, **kwargs)
+            self.mem[args, str(kwargs)] = tmp
+            return tmp
+
+
 class NagiosType(object):
     directives = None
 
@@ -309,6 +324,7 @@ class NagiosConfig:
                           port=port,
                           api_version=api_version,
                           timeout=20)
+        self.db.resources = Memorize(self.db.resources)
         self.output_dir = output_dir
         if not nodefacts:
             self.nodefacts = self.get_nodefacts()
