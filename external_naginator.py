@@ -348,7 +348,13 @@ class NagiosConfig:
 if __name__ == '__main__':
     import argparse
 
-    parser = argparse.ArgumentParser(
+    class ArgumentParser(argparse.ArgumentParser):
+
+        def error(self, message):
+            self.print_help(sys.stderr)
+            self.exit(2, '%s: error: %s\n' % (self.prog, message))
+
+    parser = ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--output-dir', action='store', required=True,
