@@ -294,7 +294,6 @@ class CustomNagiosHostGroup(NagiosType):
 
         tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
                                              hostgroup_name)
-        f = open(tmp_file, 'w')
         for hostname, facts in self.nodefacts.items():
             try:
                 factvalue = fact_name.format(**facts)
@@ -308,6 +307,11 @@ class CustomNagiosHostGroup(NagiosType):
                 query=self.query_string('Nagios_host'))
              if h.name in self.nodefacts])
 
+        # if there are no hosts in the group then exit
+        if not hostgroup.items():
+            return
+
+        f = open(tmp_file, 'w')
         for hostgroup_name, hosts in hostgroup.items():
             f.write("define hostgroup {\n")
             f.write(" hostgroup_name %s\n" % (hostgroup_name))
