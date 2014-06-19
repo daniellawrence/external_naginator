@@ -80,7 +80,7 @@ class NagiosType(object):
             # Make sure we do not try and make more than one resource
             # for each one.
             if r.name in unique_list:
-                LOG.warning("duplicate: %s" % r.name)
+                LOG.info("duplicate: %s" % r.name)
                 continue
             unique_list.add(r.name)
 
