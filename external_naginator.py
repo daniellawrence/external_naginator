@@ -114,7 +114,7 @@ class NagiosHost(NagiosType):
                       '3d_coords', 'use'])
 
     def generate_name(self, resource):
-        if resource.name in self.nodefacts:
+        if resource.name in self.nodefacts or 'use' in resource.parameters:
             self.file.write("  %-30s %s\n" % ("host_name", resource.name))
         else:
             self.file.write("  %-30s %s\n" % ("name", resource.name))
