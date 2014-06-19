@@ -260,53 +260,57 @@ class NagiosContactGroup(NagiosType):
 
 class CustomNagiosHostGroup(NagiosType):
     def __init__(self, db, output_dir, name,
-                 nodefacts=None, query=None,
+                 nodefacts=None,
+                 nodes=None,
+                 query=None,
                  environment=None):
         self.nagios_type = name
+        self.nodes = nodes
         super(CustomNagiosHostGroup, self).__init__(db=db,
                                                     output_dir=output_dir,
                                                     nodefacts=nodefacts,
                                                     query=query,
                                                     environment=environment)
 
-    def generate(self, hostgroup_name, fact_name):
-        """
-        Generate a nagios host group.
+    def generate(self, hostgroup_name, traits):
+        traits = dict(traits)
+        fact_template = traits.pop('fact_template')
+        hostgroup_name = hostgroup_name.split('_', 1)[1]
+        hostgroup_alias = traits.pop('name')
 
-        This could use some love for example:
-         passing operatingsystem and operatingsystem would work.
-        """
+        # Gather hosts base on some resource traits.
+        members = []
+        for node in self.nodes:
+            for type_, title in traits.items():
+                if not len(list(node.resources(type_, title))) > 0:
+                    break
+            else:
+                members.append(node)
 
         hostgroup = defaultdict(list)
-        factvalue = "unknown"
-
-        tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
-                                             hostgroup_name)
-        for hostname, facts in self.nodefacts.items():
+        for node in members or self.nodes:
+            facts = self.nodefacts[node.name]
             try:
-                factvalue = fact_name.format(**facts)
+                fact_name = hostgroup_name.format(**facts)
+                fact_alias = hostgroup_alias.format(**facts)
             except KeyError:
-                LOG.error("Can't find facts for hostgroup %s" % fact_name)
+                LOG.error("Can't find facts for hostgroup %s" % fact_template)
                 raise
-            hostgroup[factvalue].append(hostname)
-
-        nagios_hosts = set(
-            [h.name for h in self.db.resources(
-                query=self.query_string('Nagios_host'),
-                environment=self.environment)
-             if h.name in self.nodefacts])
+            print (fact_name, fact_alias), node
+            hostgroup[(fact_name, fact_alias)].append(node)
 
         # if there are no hosts in the group then exit
         if not hostgroup.items():
             return
 
-        f = open(tmp_file, 'w')
         for hostgroup_name, hosts in hostgroup.items():
+            tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
+                                                 hostgroup_name[0])
+            f = open(tmp_file, 'w')
             f.write("define hostgroup {\n")
-            f.write(" hostgroup_name %s\n" % (hostgroup_name))
-            f.write(" alias %s\n" % (hostgroup_name))
-            f.write(" members %s\n" % ",".join([h for h in hosts
-                                                if h in nagios_hosts]))
+            f.write(" hostgroup_name %s\n" % hostgroup_name[0])
+            f.write(" alias %s\n" % hostgroup_name[1])
+            f.write(" members %s\n" % ",".join([h.name for h in hosts]))
             f.write("}\n")
 
 
@@ -350,7 +354,9 @@ class NagiosConfig:
         }
         """
         nodefacts = {}
+        self.nodes = []
         for node in self.db.nodes(query=self.query_string()):
+            self.nodes.append(node)
             nodefacts[node.name] = {}
             for f in node.facts():
                 nodefacts[node.name][f.name] = f.value
@@ -439,6 +445,9 @@ if __name__ == '__main__':
             if not section.startswith('hostgroup_'):
                 continue
             group = CustomNagiosHostGroup(cfg.db, args.output_dir,
-                                          section, cfg.nodefacts, query,
-                                          environment)
-            group.generate(section, config.get(section, 'fact_template'))
+                                          section,
+                                          nodefacts=cfg.nodefacts,
+                                          nodes=cfg.nodes,
+                                          query=query,
+                                          environment=environment)
+            group.generate(section, config.items(section))
