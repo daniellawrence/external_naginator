@@ -16,9 +16,10 @@ class NagiosType(object):
     directives = None
 
     def __init__(self, db, output_dir,
-                 nodefacts=None, query=None):
+                 nodefacts=None, query=None, environment=None):
         self.db = db
         self.output_dir = output_dir
+        self.environment = environment
         if not nodefacts:
             self.nodefacts = self.get_nodefacts()
         else:
@@ -74,7 +75,8 @@ class NagiosType(object):
         # the Nagios type.
         unique_list = set([])
 
-        for r in self.db.resources(query=self.query_string()):
+        for r in self.db.resources(query=self.query_string(),
+                                   environment=self.environment):
             # Make sure we do not try and make more than one resource
             # for each one.
             if r.name in unique_list:
@@ -135,12 +137,11 @@ class NagiosServiceGroup(NagiosType):
 
         # Keep track of sevice to hostname
         servicegroups = defaultdict(list)
-
-        for r in self.db.resources(query=self.query_string('Nagios_service')):
+        for r in self.db.resources(query=self.query_string('Nagios_service'),
+                                   environment=self.environment):
             # Make sure we do not try and make more than one resource
             # for each one.
             if r.name in unique_list:
-                LOG.warning("duplicate: %s" % r.name)
                 continue
             unique_list.add(r.name)
 
@@ -259,12 +260,14 @@ class NagiosContactGroup(NagiosType):
 
 class CustomNagiosHostGroup(NagiosType):
     def __init__(self, db, output_dir, name,
-                 nodefacts=None, query=None):
+                 nodefacts=None, query=None,
+                 environment=None):
         self.nagios_type = name
         super(CustomNagiosHostGroup, self).__init__(db=db,
                                                     output_dir=output_dir,
                                                     nodefacts=nodefacts,
-                                                    query=query)
+                                                    query=query,
+                                                    environment=environment)
 
     def generate(self, hostgroup_name, fact_name):
         """
@@ -289,7 +292,8 @@ class CustomNagiosHostGroup(NagiosType):
 
         nagios_hosts = set(
             [h.name for h in self.db.resources(
-                query=self.query_string('Nagios_host'))
+                query=self.query_string('Nagios_host'),
+                environment=self.environment)
              if h.name in self.nodefacts])
 
         # if there are no hosts in the group then exit
@@ -308,18 +312,29 @@ class CustomNagiosHostGroup(NagiosType):
 
 class NagiosConfig:
     def __init__(self, hostname, port, api_version, output_dir,
-                 nodefacts=None, query=None):
+                 nodefacts=None, query=None, environment=None):
         self.db = connect(host=hostname,
                           port=port,
                           api_version=api_version,
                           timeout=20)
         self.db.resources = self.db.resources
         self.output_dir = output_dir
+        self.environment = environment
         if not nodefacts:
             self.nodefacts = self.get_nodefacts()
         else:
             self.nodefacts = nodefacts
         self.query = query
+
+    def query_string(self):
+        if not self.environment:
+            return None
+        query_parts = []
+        query_parts.append('["=", "%s", "%s"]' % ('catalog-environment',
+                                                  self.environment))
+        query_parts.append('["=", "%s", "%s"]' % ('facts-environment',
+                                                  self.environment))
+        return '["and", %s]' % ", ".join(query_parts)
 
     def get_nodefacts(self):
         """
@@ -335,7 +350,7 @@ class NagiosConfig:
         }
         """
         nodefacts = {}
-        for node in self.db.nodes():
+        for node in self.db.nodes(query=self.query_string()):
             nodefacts[node.name] = {}
             for f in node.facts():
                 nodefacts[node.name][f.name] = f.value
@@ -345,8 +360,11 @@ class NagiosConfig:
         for cls in NagiosType.__subclasses__():
             if cls.__name__.startswith('Custom'):
                 continue
-            inst = cls(self.db, self.output_dir,
-                       self.nodefacts, self.query)
+            inst = cls(db=self.db,
+                       output_dir=self.output_dir,
+                       nodefacts=self.nodefacts,
+                       query=self.query,
+                       environment=self.environment)
             inst.generate()
 
 
@@ -374,7 +392,7 @@ if __name__ == '__main__':
         '--port', action='store', default=8080, type=int,
         help="The port of the puppet DB server.")
     parser.add_argument(
-        '-V', '--api-version', action='store', default=3, type=int,
+        '-V', '--api-version', action='store', default=4, type=int,
         help="The puppet DB version")
     parser.add_argument(
         '-v', '--verbose', action='count', default=0,
@@ -403,11 +421,17 @@ if __name__ == '__main__':
         if 'query' in config.sections():
             query = config.items('query')
 
+    try:
+        environment = config.get('puppet', 'environment')
+    except:
+        environment = None
+
     cfg = NagiosConfig(hostname=args.host,
                        port=args.port,
                        api_version=args.api_version,
                        output_dir=args.output_dir,
-                       query=query)
+                       query=query,
+                       environment=environment)
     cfg.generate_all()
 
     if config:
@@ -415,5 +439,6 @@ if __name__ == '__main__':
             if not section.startswith('hostgroup_'):
                 continue
             group = CustomNagiosHostGroup(cfg.db, args.output_dir,
-                                          section, cfg.nodefacts, query)
+                                          section, cfg.nodefacts, query,
+                                          environment)
             group.generate(section, config.get(section, 'fact_template'))
