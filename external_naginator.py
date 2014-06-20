@@ -304,8 +304,8 @@ class CustomNagiosHostGroup(NagiosType):
             return
 
         for hostgroup_name, hosts in hostgroup.items():
-            tmp_file = "{0}/auto_{1}.cfg".format(self.output_dir,
-                                                 hostgroup_name[0])
+            tmp_file = "{0}/auto_hostgroup_{1}.cfg".format(self.output_dir,
+                                                           hostgroup_name[0])
             f = open(tmp_file, 'w')
             f.write("define hostgroup {\n")
             f.write(" hostgroup_name %s\n" % hostgroup_name[0])
