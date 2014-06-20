@@ -287,8 +287,18 @@ class CustomNagiosHostGroup(NagiosType):
             else:
                 members.append(node)
 
+        nagios_hosts = set(
+            [h.name for h in self.db.resources(
+                query=self.query_string('Nagios_host'),
+                environment=self.environment)
+             if h.name in self.nodefacts])
+
         hostgroup = defaultdict(list)
         for node in members or self.nodes:
+            if node.name not in nagios_hosts:
+                LOG.debug("Skipping host with no nagios_host resource %s" %
+                          node.name)
+                continue
             facts = self.nodefacts[node.name]
             try:
                 fact_name = hostgroup_name.format(**facts)
