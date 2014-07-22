@@ -6,7 +6,7 @@ push the configuration to the nagios server.
 
 from fabric.api import env, local, sudo, task, puts, settings, hide
 from fabric.api import put
-from generate import generate_all
+from external_naginator import NagiosConfig
 
 env.host_string = 'yournagiossyserver.fqdn'
 
@@ -25,7 +25,11 @@ def deploy(puppetdb_host="puppet", puppetdb_port=8080, puppetdb_apiversion=3):
     # Generate the nagios configuration into a temp dir
     puts("Generating files")
     with settings(hide('everything')):
-        generate_all(puppetdb_host, puppetdb_port, puppetdb_apiversion)
+        cfg = NagiosConfig(hostname=puppetdb_host,
+                           port=puppetdb_port,
+                           api_version=puppetdb_apiversion,
+                           output_dir=TMP_DIR)
+        cfg.generate_all()
 
     # Clean up the current auto_*.cfg on nagios01
     with settings(warn_only=True):

@@ -8,7 +8,7 @@ class TestGenearate(unittest.TestCase):
 
     def test_smoke(self):
         "Basic smoke test that should pickup any silly errors"
-        import generate
+        import external_naginator
 
 if __name__ == '__main__':
     unittest.main()

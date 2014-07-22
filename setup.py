@@ -9,8 +9,11 @@ setup(
     author="Daniel Lawrence",
     author_email="dannyla@linux.com",
     description="Generate nagios configuration from puppetdb",
-    scripts=["generate.py"],
+    scripts=["external_naginator.py"],
     license="MIT",
     keywords="puppetdb nagios",
     url="http://github.com/daniellawrence/external_naginator",
+    install_requires=[
+        'pypuppetdb >= 0.0.4'
+    ],
 )
